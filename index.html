@@ -382,7 +382,7 @@ function menu(){
   openSheet(`<h2>Menu</h2>
   <div class="btns" style="flex-direction:column"><button id="m-grp">${cloud?'Group: '+esc(cloud.grp)+' · You: '+esc(cloud.me):'Share with friends'}</button>${cloud?'<button id="m-push">'+(pushOn()?'Notifications: ON (tap to turn off)':'Turn on notifications')+'</button>':''}${cloud?'<button id="m-sync">Sync now ('+esc(syncMsg||'not yet')+')</button>':''}<button id="m-ics">Export to iPhone Calendar (.ics)</button>
   <button id="m-exp">Back up data (copy JSON)</button><button id="m-imp">Restore from backup</button><button id="m-x">Close</button></div>
-  <p class="note">Your data is saved only on this device in Safari/home-screen storage. Back up now and then. Notifications are not possible in a plain web app, so check the Agenda and To-do tabs, or export to the Calendar app to get alerts.</p>`);
+  <p class="note">${cloud?'Your plan and ticks are saved in your group online, so they sync across your friends and survive a phone change. Keep this app on your Home Screen and open it from there. Reminders arrive at about 8am and 8pm (India time) and shortly before timed items, so a few minutes of delay is normal.':'Your data is saved only on this device. Tap Share with friends to save it online and get reminders.'} The backup option below is optional.</p>`);
   $('#m-x').onclick=closeSheet;
   $('#m-grp').onclick=joinSheet;
   if(cloud)$('#m-push').onclick=async()=>{pushOn()?await disablePush():await enablePush();menu()};
