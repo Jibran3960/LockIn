@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Calendar" />
+<meta name="theme-color" content="#0A0F1E" />
+<title>My Calendar</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>" />
+<link rel="apple-touch-icon" id="touchIcon" href="" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0A0F1E;--card:#111a2e;--card2:#16213a;--line:#1e2a47;--text:#e8ecf6;--mute:#8b97b5;--acc:#6366f1;--red:#f87171;--green:#34d399;
+--safe-t:env(safe-area-inset-top);--safe-b:env(safe-area-inset-bottom)}
+html,body{height:100%;width:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;
+-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,select,textarea{font:inherit;color:var(--text);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;
+-webkit-user-select:text;user-select:text;font-size:16px}
+#app{height:100%;display:flex;flex-direction:column;padding-top:var(--safe-t)}
+header{padding:10px 16px 6px;display:flex;align-items:center;gap:8px}
+header h1{font-size:22px;font-weight:700;flex:1}
+.ibtn{width:38px;height:38px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:18px;display:grid;place-items:center}
+.tabs{display:flex;margin:4px 16px 8px;background:var(--card);border-radius:12px;padding:3px;border:1px solid var(--line)}
+.tabs button{flex:1;padding:7px;border-radius:9px;font-size:14px;color:var(--mute)}
+.tabs button.on{background:var(--acc);color:#fff;font-weight:600}
+main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 12px calc(90px + var(--safe-b))}
+.dow,.grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.dow div{text-align:center;font-size:11px;color:var(--mute);padding:6px 0;text-transform:uppercase;letter-spacing:.5px}
+.cell{aspect-ratio:1/1.12;border-radius:12px;display:flex;flex-direction:column;align-items:center;padding-top:6px;gap:3px;position:relative;margin:1px}
+.cell.out{opacity:.3}
+.cell .n{width:28px;height:28px;display:grid;place-items:center;border-radius:50%;font-size:15px}
+.cell.today .n{background:var(--acc);color:#fff;font-weight:700}
+.cell.sel{background:var(--card2);outline:1px solid var(--acc)}
+.cell.hol .n{color:var(--red)}
+.dots{display:flex;gap:3px;height:6px}
+.dot{width:6px;height:6px;border-radius:50%}
+.sec{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--mute);margin:16px 4px 8px}
+.item{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:11px 12px;margin-bottom:8px}
+.bar{width:4px;align-self:stretch;border-radius:4px}
+.item .t{flex:1;min-width:0}
+.item .t b{display:block;font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .t small{color:var(--mute);font-size:12px}
+.item.done .t b{text-decoration:line-through;color:var(--mute)}
+.chk{width:24px;height:24px;border-radius:50%;border:2px solid var(--mute);display:grid;place-items:center;font-size:13px;flex-shrink:0}
+.chk.on{background:var(--green);border-color:var(--green);color:#042}
+.badge{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--card2);color:var(--mute)}
+.badge.over{background:#4c1d1d;color:var(--red)}
+.empty{color:var(--mute);text-align:center;padding:18px;font-size:14px}
+.fab{position:fixed;right:20px;bottom:calc(24px + var(--safe-b));width:58px;height:58px;border-radius:50%;background:var(--acc);font-size:30px;color:#fff;
+box-shadow:0 8px 24px rgba(99,102,241,.5);display:grid;place-items:center;z-index:5}
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10;display:none;align-items:flex-end}
+.mask.show{display:flex}
+.sheet{background:var(--card);width:100%;max-height:92%;overflow-y:auto;border-radius:22px 22px 0 0;padding:18px 16px calc(22px + var(--safe-b));border-top:1px solid var(--line)}
+.sheet h2{font-size:18px;margin-bottom:12px}
+label{display:block;font-size:12px;color:var(--mute);margin:12px 2px 5px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;padding:9px 4px;border-radius:10px;background:var(--card2);border:1px solid var(--line);font-size:13px}
+.seg button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.colors{display:flex;gap:10px}
+.colors button{width:30px;height:30px;border-radius:50%;border:3px solid transparent}
+.colors button.on{border-color:#fff}
+.btns{display:flex;gap:10px;margin-top:18px}
+.btns button{flex:1;padding:12px;border-radius:12px;background:var(--card2);font-weight:600}
+.btns .pri{background:var(--acc);color:#fff}.btns .del{color:var(--red)}
+.note{font-size:12px;color:var(--mute);line-height:1.5;margin-top:10px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1 id="title"></h1>
+    <button class="ibtn" id="prev">‹</button>
+    <button class="ibtn" id="today" style="font-size:12px;width:auto;padding:0 12px">Today</button>
+    <button class="ibtn" id="next">›</button>
+    <button class="ibtn" id="menu">⋯</button>
+  </header>
+  <div class="tabs" id="tabs">
+    <button data-v="month" class="on">Month</button>
+    <button data-v="agenda">Agenda</button>
+    <button data-v="tasks">To-do</button>
+  </div>
+  <main id="main"></main>
+</div>
+<button class="fab" id="fab" aria-label="Add">+</button>
+<div class="mask" id="mask"><div class="sheet" id="sheet"></div></div>
+
+<script>
+(function(){
+'use strict';
+const KEY='mycal.v1';
+const COLORS=['#6366f1','#34d399','#f59e0b','#f87171','#38bdf8','#e879f9'];
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+// Fixed-date Indian public holidays (read-only). Moving festivals vary yearly, so add those as your own events.
+const HOLIDAYS={'01-01':"New Year's Day",'01-26':'Republic Day','05-01':'Maharashtra Day / Labour Day','08-15':'Independence Day','10-02':'Gandhi Jayanti','12-25':'Christmas'};
+
+const $=s=>document.querySelector(s);
+const pad=n=>String(n).padStart(2,'0');
+const fmt=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parse=s=>{const[a,b,c]=s.split('-').map(Number);return new Date(a,b-1,c)};
+const todayStr=()=>fmt(new Date());
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+let state={items:[],view:'month',cursor:fmt(new Date()),sel:todayStr()};
+// Plan from notebook (23 Nov 2026 – 24 Jan 2027). Loaded once on first run.
+const [IND,GRN,AMB,RED,SKY,PNK]=COLORS;
+const S=(id,type,title,date,color,o={})=>({id:'seed-'+id,type,title,date,time:'',repeat:'none',until:'',color,notes:'',done:[],...o});
+const SEED=[
+  S(1,'event','Class work & group work','2026-11-23',IND,{repeat:'daily',until:'2026-11-27'}),
+  S(2,'task','Business Stats assignment: understand & start planning','2026-11-28',AMB,{repeat:'daily',until:'2026-11-29'}),
+  S(3,'event',"Riddhi's B'day",'2026-12-01',PNK,{repeat:'yearly'}),
+  S(4,'task','Business Stats assignment work','2026-12-05',AMB,{repeat:'daily',until:'2026-12-06'}),
+  S(5,'deadline','Algorithm group assignment','2026-12-09',RED),
+  S(6,'task','Business Stats assignment work','2026-12-12',AMB,{repeat:'daily',until:'2026-12-13'}),
+  S(7,'deadline','AIP group assignment','2026-12-16',RED),
+  S(8,'task','Business Stats assignment work','2026-12-19',AMB),
+  S(20,'task','Analytics Engineering assignment work','2026-12-20',GRN),
+  S(21,'task','Analytics Engineering assignment work','2026-12-26',GRN,{repeat:'daily',until:'2026-12-27'}),
+  S(22,'task','Analytics Engineering assignment work','2027-01-02',GRN,{repeat:'daily',until:'2027-01-03'}),
+  S(23,'task','Analytics Engineering assignment work','2027-01-09',GRN,{repeat:'daily',until:'2027-01-10'}),
+  S(24,'task','Analytics Engineering assignment work','2027-01-16',GRN,{repeat:'daily',until:'2027-01-17'}),
+  S(10,'event',"Keerat's B'day",'2026-12-24',PNK,{repeat:'yearly'}),
+  S(11,'event',"New Year's Eve",'2026-12-31',PNK,{repeat:'yearly'}),
+  S(12,'deadline','Business Stats assignment','2027-01-04',RED),
+  S(13,'event','Exam week','2027-01-11',SKY,{repeat:'daily',until:'2027-01-17'}),
+  S(14,'deadline','Analytics Engineering assignment','2027-01-19',RED)
+];
+function load(){try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.items))state.items=r.items}catch(e){}
+  try{if(!localStorage.getItem(KEY+'.seeded')){const have=new Set(state.items.map(i=>i.id));SEED.forEach(s=>{if(!have.has(s.id))state.items.push(s)});localStorage.setItem(KEY+'.seeded','1');save()}}catch(e){}
+  const n=new Date();const t=new Date(2026,10,23);if(n<t){state.cursor=state.sel=fmt(t)}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({items:state.items}))}catch(e){}}
+
+// ---- recurrence ----
+function occursOn(it,ds){
+  if(ds<it.date)return false;
+  if(it.until&&ds>it.until)return false;
+  if(it.repeat==='none')return ds===it.date;
+  const a=parse(it.date),b=parse(ds);
+  if(it.repeat==='daily')return true;
+  if(it.repeat==='weekly')return Math.round((b-a)/864e5)%7===0;
+  if(it.repeat==='monthly'){const dim=new Date(b.getFullYear(),b.getMonth()+1,0).getDate();return b.getDate()===Math.min(a.getDate(),dim)}
+  if(it.repeat==='yearly')return a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+  return false;
+}
+const forDay=ds=>state.items.filter(i=>occursOn(i,ds)).sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99'));
+const isDone=(it,ds)=>(it.done||[]).includes(ds);
+const hol=ds=>HOLIDAYS[ds.slice(5)];
+
+// ---- render ----
+function render(){
+  const c=parse(state.cursor);
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.v===state.view));
+  const nav=state.view==='month';
+  ['prev','next'].forEach(i=>$('#'+i).style.visibility=nav?'visible':'hidden');
+  $('#title').textContent=nav?MONTHS[c.getMonth()]+' '+c.getFullYear():state.view==='agenda'?'Upcoming':'To-do';
+  const m=$('#main');
+  m.innerHTML=state.view==='month'?monthHTML(c):state.view==='agenda'?agendaHTML():tasksHTML();
+}
+function itemHTML(it,ds,showDate){
+  const task=it.type!=='event',done=isDone(it,ds);
+  const over=task&&!done&&ds<todayStr();
+  const meta=[showDate?fmtLong(ds):'',it.time?fmtTime(it.time):(task?'':'All day'),it.repeat!=='none'?'↻ '+it.repeat:'',it.type==='deadline'?'Deadline':''].filter(Boolean).join(' · ');
+  return `<div class="item ${done?'done':''}" data-id="${it.id}" data-ds="${ds}">
+    <div class="bar" style="background:${it.color}"></div>
+    ${task?`<button class="chk ${done?'on':''}" data-chk="${it.id}" data-ds="${ds}">${done?'✓':''}</button>`:''}
+    <div class="t"><b>${esc(it.title)}</b><small>${esc(meta)}</small></div>
+    ${over?'<span class="badge over">Overdue</span>':''}</div>`;
+}
+function monthHTML(c){
+  const y=c.getFullYear(),mo=c.getMonth(),first=new Date(y,mo,1).getDay(),dim=new Date(y,mo+1,0).getDate();
+  let h='<div class="dow">'+DAYS.map(d=>`<div>${d[0]}</div>`).join('')+'</div><div class="grid">';
+  const start=new Date(y,mo,1-first);
+  const total=Math.ceil((first+dim)/7)*7;
+  for(let i=0;i<total;i++){
+    const d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i),ds=fmt(d);
+    const its=forDay(ds).slice(0,3);
+    h+=`<button class="cell ${d.getMonth()!==mo?'out':''} ${ds===todayStr()?'today':''} ${ds===state.sel?'sel':''} ${hol(ds)?'hol':''}" data-day="${ds}">
+      <span class="n">${d.getDate()}</span><span class="dots">${its.map(i=>`<i class="dot" style="background:${i.color}"></i>`).join('')}</span></button>`;
+  }
+  h+='</div>';
+  const list=forDay(state.sel),hn=hol(state.sel);
+  h+=`<div class="sec">${fmtLong(state.sel)}${hn?' · '+esc(hn):''}</div>`;
+  h+=list.length?list.map(i=>itemHTML(i,state.sel)).join(''):'<div class="empty">Nothing planned. Tap + to add.</div>';
+  return h;
+}
+function agendaHTML(){
+  let h='',n=0;const t=parse(todayStr());
+  for(let i=0;i<60;i++){
+    const d=new Date(t.getFullYear(),t.getMonth(),t.getDate()+i),ds=fmt(d),l=forDay(ds),hn=hol(ds);
+    if(!l.length&&!hn)continue;n++;
+    h+=`<div class="sec">${i===0?'Today':i===1?'Tomorrow':fmtLong(ds)}${hn?' · '+esc(hn):''}</div>`+l.map(x=>itemHTML(x,ds)).join('');
+  }
+  return n?h:'<div class="empty">Nothing in the next 60 days.</div>';
+}
+function tasksHTML(){
+  const ts=todayStr();let over=[],soon=[],done=[];
+  state.items.filter(i=>i.type!=='event').forEach(it=>{
+    if(it.repeat==='none'){(isDone(it,it.date)?done:it.date<ts?over:soon).push([it,it.date])}
+    else{
+      // next not-done occurrence within 60 days (overdue: last 30 days)
+      const t=parse(ts);
+      for(let k=-30;k<=60;k++){const d=fmt(new Date(t.getFullYear(),t.getMonth(),t.getDate()+k));
+        if(occursOn(it,d)&&!isDone(it,d)){(d<ts?over:soon).push([it,d]);if(d>=ts)break}}
+    }
+  });
+  const by=(a,b)=>a[1].localeCompare(b[1]);
+  const blk=(t,l)=>l.length?`<div class="sec">${t}</div>`+l.sort(by).map(([i,d])=>itemHTML(i,d,true)).join(''):'';
+  return (blk('Overdue',over)+blk('Upcoming',soon)+blk('Completed',done.slice(-15))) ||'<div class="empty">No tasks or deadlines yet.</div>';
+}
+function fmtLong(ds){const d=parse(ds);return DAYS[d.getDay()]+', '+d.getDate()+' '+MONTHS[d.getMonth()].slice(0,3)}
+function fmtTime(t){let[h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';h=h%12||12;return h+':'+pad(m)+' '+ap}
+
+// ---- sheet ----
+const mask=$('#mask'),sheet=$('#sheet');
+function openSheet(html){sheet.innerHTML=html;mask.classList.add('show')}
+function closeSheet(){mask.classList.remove('show')}
+mask.addEventListener('click',e=>{if(e.target===mask)closeSheet()});
+
+function editor(id,ds){
+  const ex=state.items.find(i=>i.id===id);
+  const it=ex?{...ex}:{id:uid(),type:'event',title:'',date:ds||state.sel,time:'',repeat:'none',until:'',color:COLORS[0],notes:'',done:[]};
+  const seg=(k,opts)=>`<div class="seg" data-k="${k}">${opts.map(([v,l])=>`<button data-v="${v}" class="${it[k]===v?'on':''}">${l}</button>`).join('')}</div>`;
+  openSheet(`<h2>${ex?'Edit':'New'}</h2>
+    <label>Type</label>${seg('type',[['event','Event'],['task','Task'],['deadline','Deadline']])}
+    <label>Title</label><input id="f-title" placeholder="e.g. GST return filing" value="${esc(it.title)}">
+    <div class="row"><div><label>Date</label><input type="date" id="f-date" value="${it.date}"></div>
+    <div><label>Time (optional)</label><input type="time" id="f-time" value="${it.time}"></div></div>
+    <label>Repeat</label>${seg('repeat',[['none','Never'],['daily','Daily'],['weekly','Weekly'],['monthly','Monthly'],['yearly','Yearly']])}
+    <label>Repeat until (optional)</label><input type="date" id="f-until" value="${it.until}">
+    <label>Colour</label><div class="colors" data-k="color">${COLORS.map(c=>`<button data-v="${c}" class="${it.color===c?'on':''}" style="background:${c}"></button>`).join('')}</div>
+    <label>Notes</label><textarea id="f-notes" rows="3">${esc(it.notes)}</textarea>
+    <div class="btns">${ex?'<button class="del" id="f-del">Delete</button>':''}<button id="f-cancel">Cancel</button><button class="pri" id="f-save">Save</button></div>`);
+  sheet.querySelectorAll('[data-k]').forEach(g=>g.addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;it[g.dataset.k]=b.dataset.v;
+    g.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+  }));
+  $('#f-cancel').onclick=closeSheet;
+  $('#f-save').onclick=()=>{
+    it.title=$('#f-title').value.trim();it.date=$('#f-date').value;it.time=$('#f-time').value;
+    it.until=$('#f-until').value;it.notes=$('#f-notes').value;
+    if(!it.title){$('#f-title').focus();return}
+    if(!it.date)return;
+    const i=state.items.findIndex(x=>x.id===it.id);i>=0?state.items[i]=it:state.items.push(it);
+    save();state.sel=it.date;state.cursor=it.date;closeSheet();render();
+  };
+  if(ex)$('#f-del').onclick=()=>{if(confirm('Delete "'+it.title+'"'+(it.repeat!=='none'?' and all its repeats':'')+'?')){state.items=state.items.filter(x=>x.id!==it.id);save();closeSheet();render()}};
+}
+
+function menu(){
+  openSheet(`<h2>Menu</h2>
+  <div class="btns" style="flex-direction:column"><button id="m-ics">Export to iPhone Calendar (.ics)</button>
+  <button id="m-exp">Back up data (copy JSON)</button><button id="m-imp">Restore from backup</button><button id="m-x">Close</button></div>
+  <p class="note">Your data is saved only on this device in Safari/home-screen storage. Back up now and then. Notifications are not possible in a plain web app, so check the Agenda and To-do tabs, or export to the Calendar app to get alerts.</p>`);
+  $('#m-x').onclick=closeSheet;
+  $('#m-exp').onclick=async()=>{const s=JSON.stringify(state.items);try{await navigator.clipboard.writeText(s);alert('Backup copied. Paste it into Notes to keep it safe.')}catch(e){prompt('Copy this backup:',s)}};
+  $('#m-imp').onclick=()=>{const s=prompt('Paste your backup JSON:');if(!s)return;try{const a=JSON.parse(s);if(!Array.isArray(a))throw 0;state.items=a;save();closeSheet();render()}catch(e){alert('That does not look like a valid backup.')}};
+  $('#m-ics').onclick=exportICS;
+}
+function exportICS(){
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//MyCal//EN'];
+  const d8=s=>s.replace(/-/g,''),t6=t=>t.replace(':','')+'00';
+  state.items.forEach(it=>{
+    L.push('BEGIN:VEVENT','UID:'+it.id+'@mycal','DTSTAMP:'+new Date().toISOString().replace(/[-:]|\.\d+/g,''));
+    if(it.time)L.push('DTSTART:'+d8(it.date)+'T'+t6(it.time));else{L.push('DTSTART;VALUE=DATE:'+d8(it.date))}
+    const f={daily:'DAILY',weekly:'WEEKLY',monthly:'MONTHLY',yearly:'YEARLY'}[it.repeat];
+    if(f)L.push('RRULE:FREQ='+f+(it.until?';UNTIL='+d8(it.until):''));
+    L.push('SUMMARY:'+(it.type==='deadline'?'⏰ ':it.type==='task'?'☐ ':'')+it.title.replace(/[,;\n]/g,' '));
+    if(it.notes)L.push('DESCRIPTION:'+it.notes.replace(/\n/g,'\\n').replace(/[,;]/g,' '));
+    L.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:Reminder','TRIGGER:'+(it.time?'-PT30M':'PT9H'),'END:VALARM','END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  const blob=new Blob([L.join('\r\n')],{type:'text/calendar'}),url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='my-calendar.ics';document.body.appendChild(a);a.click();a.remove();
+}
+
+// ---- events ----
+$('#prev').onclick=()=>{const c=parse(state.cursor);state.cursor=fmt(new Date(c.getFullYear(),c.getMonth()-1,1));render()};
+$('#next').onclick=()=>{const c=parse(state.cursor);state.cursor=fmt(new Date(c.getFullYear(),c.getMonth()+1,1));render()};
+$('#today').onclick=()=>{state.cursor=state.sel=todayStr();render()};
+$('#menu').onclick=menu;
+$('#fab').onclick=()=>editor(null,state.view==='month'?state.sel:todayStr());
+$('#tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(b){state.view=b.dataset.v;render()}});
+$('#main').addEventListener('click',e=>{
+  const chk=e.target.closest('[data-chk]');
+  if(chk){const it=state.items.find(i=>i.id===chk.dataset.chk),d=chk.dataset.ds;it.done=it.done||[];
+    const k=it.done.indexOf(d);k>=0?it.done.splice(k,1):it.done.push(d);save();render();return}
+  const item=e.target.closest('.item');if(item){editor(item.dataset.id);return}
+  const cell=e.target.closest('[data-day]');
+  if(cell){state.sel=cell.dataset.day;const d=parse(state.sel);if(d.getMonth()!==parse(state.cursor).getMonth())state.cursor=state.sel;render()}
+});
+// swipe months
+let sx=null;$('#main').addEventListener('touchstart',e=>{sx=e.touches[0].clientX},{passive:true});
+$('#main').addEventListener('touchend',e=>{if(sx===null||state.view!=='month')return;const dx=e.changedTouches[0].clientX-sx;sx=null;
+  if(Math.abs(dx)>70)(dx<0?$('#next'):$('#prev')).click()},{passive:true});
+
+// home-screen icon generated on the fly
+try{const c=document.createElement('canvas');c.width=c.height=180;const x=c.getContext('2d');
+  x.fillStyle='#0A0F1E';x.fillRect(0,0,180,180);x.fillStyle='#6366f1';x.fillRect(30,40,120,110);
+  x.fillStyle='#fff';x.fillRect(30,68,120,82);x.fillStyle='#6366f1';x.font='bold 56px -apple-system,sans-serif';x.textAlign='center';
+  x.fillText(String(new Date().getDate()),90,128);$('#touchIcon').href=c.toDataURL('image/png')}catch(e){}
+
+load();render();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)render()});
+})();
+</script>
+</body>
+</html>
