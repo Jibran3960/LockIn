@@ -10,7 +10,8 @@
 <meta name="theme-color" content="#0A0F1E" />
 <title>LockIn</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>" />
-<link rel="apple-touch-icon" id="touchIcon" href="" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icon-180.png" />
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0A0F1E;--card:#111a2e;--card2:#16213a;--line:#1e2a47;--text:#e8ecf6;--mute:#8b97b5;--acc:#6366f1;--red:#f87171;--green:#34d399;
@@ -171,7 +172,7 @@ async function toggleDone(it,ds){
   render();
   try{
     if(had)await api('completions?'+grpQ()+'&item_id=eq.'+enc(it.id)+'&ds=eq.'+ds+'&member=eq.'+enc(me),{method:'DELETE'});
-    else await api('completions?on_conflict=grp,item_id,ds,member',{method:'POST',headers:PREF,body:JSON.stringify([{grp:cloud.grp,item_id:it.id,ds,member:me}])});
+    else await api('completions?on_conflict=grp,item_id,ds,member',{method:'POST',headers:PREF,body:JSON.stringify([{grp:cloud.grp,item_id:it.id,ds,member:me,notify:true}])});
   }catch(e){alert('Could not save your tick to the group (check your internet).');sync()}
 }
 async function sync(){
@@ -192,6 +193,29 @@ async function sync(){
     syncMsg='Synced '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
   }catch(e){syncMsg='Offline - showing last saved copy';console.warn(e);syncing=false;return false}
   syncing=false;if(!document.querySelector('.mask.show'))render();return true;
+}
+const VAPID_PUBLIC='BL78Dbmv-FiiS0WBGAQW4LwKMwOBIwO10EfDc3v6qGIGvvykGw4SdECr8D2Axwz-oWS8iaUm9CWBP5XhsUBhBCk';
+const b64u=v=>{const p='='.repeat((4-v.length%4)%4),r=atob((v+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from([...r].map(c=>c.charCodeAt(0)))};
+const pushOn=()=>{try{return localStorage.getItem(KEY+'.push')==='1'&&typeof Notification!=='undefined'&&Notification.permission==='granted'}catch(e){return false}};
+async function enablePush(){
+  if(!cloud){alert('Join your group first (Share with friends).');return}
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||typeof Notification==='undefined'){
+    alert('On iPhone, notifications only work from the Home Screen app. Tap Share, then Add to Home Screen, open LockIn from there, and try again.');return}
+  try{
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){alert('Notifications were not allowed. You can turn them on in iPhone Settings > Notifications > LockIn.');return}
+    const reg=await navigator.serviceWorker.ready;
+    const sub=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(VAPID_PUBLIC)});
+    const j=sub.toJSON();
+    await api('push_subs?on_conflict=endpoint',{method:'POST',headers:PREF,body:JSON.stringify([{grp:cloud.grp,member:cloud.me,endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth}])});
+    try{localStorage.setItem(KEY+'.push','1')}catch(e){}
+    reg.showNotification('LockIn',{body:'Notifications are on ✅',icon:'icon-192.png'});
+  }catch(e){alert('Could not turn on notifications: '+e.message)}
+}
+async function disablePush(){
+  try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
+    if(sub){if(cloud)await api('push_subs?endpoint=eq.'+enc(sub.endpoint),{method:'DELETE'}).catch(()=>{});await sub.unsubscribe()}}catch(e){}
+  try{localStorage.removeItem(KEY+'.push')}catch(e){}
 }
 function joinSheet(){
   openSheet(`<h2>Share with friends</h2>
@@ -348,11 +372,12 @@ function editor(id,ds){
 
 function menu(){
   openSheet(`<h2>Menu</h2>
-  <div class="btns" style="flex-direction:column"><button id="m-grp">${cloud?'Group: '+esc(cloud.grp)+' · You: '+esc(cloud.me):'Share with friends'}</button>${cloud?'<button id="m-sync">Sync now ('+esc(syncMsg||'not yet')+')</button>':''}<button id="m-ics">Export to iPhone Calendar (.ics)</button>
+  <div class="btns" style="flex-direction:column"><button id="m-grp">${cloud?'Group: '+esc(cloud.grp)+' · You: '+esc(cloud.me):'Share with friends'}</button>${cloud?'<button id="m-push">'+(pushOn()?'Notifications: ON (tap to turn off)':'Turn on notifications')+'</button>':''}${cloud?'<button id="m-sync">Sync now ('+esc(syncMsg||'not yet')+')</button>':''}<button id="m-ics">Export to iPhone Calendar (.ics)</button>
   <button id="m-exp">Back up data (copy JSON)</button><button id="m-imp">Restore from backup</button><button id="m-x">Close</button></div>
   <p class="note">Your data is saved only on this device in Safari/home-screen storage. Back up now and then. Notifications are not possible in a plain web app, so check the Agenda and To-do tabs, or export to the Calendar app to get alerts.</p>`);
   $('#m-x').onclick=closeSheet;
   $('#m-grp').onclick=joinSheet;
+  if(cloud)$('#m-push').onclick=async()=>{pushOn()?await disablePush():await enablePush();menu()};
   if(cloud)$('#m-sync').onclick=async()=>{await sync();menu()};
   $('#m-exp').onclick=async()=>{const s=JSON.stringify(state.items);try{await navigator.clipboard.writeText(s);alert('Backup copied. Paste it into Notes to keep it safe.')}catch(e){prompt('Copy this backup:',s)}};
   $('#m-imp').onclick=()=>{const s=prompt('Paste your backup JSON:');if(!s)return;try{const a=JSON.parse(s);if(!Array.isArray(a))throw 0;state.items=a;save();closeSheet();render()}catch(e){alert('That does not look like a valid backup.')}};
@@ -395,12 +420,7 @@ let sx=null;$('#main').addEventListener('touchstart',e=>{sx=e.touches[0].clientX
 $('#main').addEventListener('touchend',e=>{if(sx===null||state.view!=='month')return;const dx=e.changedTouches[0].clientX-sx;sx=null;
   if(Math.abs(dx)>70)(dx<0?$('#next'):$('#prev')).click()},{passive:true});
 
-// home-screen icon generated on the fly
-try{const c=document.createElement('canvas');c.width=c.height=180;const x=c.getContext('2d');
-  x.fillStyle='#0A0F1E';x.fillRect(0,0,180,180);x.fillStyle='#6366f1';x.fillRect(30,40,120,110);
-  x.fillStyle='#fff';x.fillRect(30,68,120,82);x.fillStyle='#6366f1';x.font='bold 56px -apple-system,sans-serif';x.textAlign='center';
-  x.fillText(String(new Date().getDate()),90,128);$('#touchIcon').href=c.toDataURL('image/png')}catch(e){}
-
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 load();render();
 if(cloud)sync();else{try{if(!localStorage.getItem(KEY+'.nocloud'))setTimeout(joinSheet,400)}catch(e){}}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){render();sync()}});

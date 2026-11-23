@@ -1,0 +1,23 @@
+name: LockIn notifications
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+concurrency: { group: notify, cancel-in-progress: false }
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install --no-audit --no-fund
+        working-directory: notify
+      - run: node notify.js
+        working-directory: notify
+        env:
+          SUPABASE_URL: https://vvqbedihsnhobhiabuew.supabase.co
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          VAPID_PUBLIC_KEY: BL78Dbmv-FiiS0WBGAQW4LwKMwOBIwO10EfDc3v6qGIGvvykGw4SdECr8D2Axwz-oWS8iaUm9CWBP5XhsUBhBCk
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
