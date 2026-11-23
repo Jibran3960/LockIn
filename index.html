@@ -68,6 +68,9 @@ label{display:block;font-size:12px;color:var(--mute);margin:12px 2px 5px}
 .btns{display:flex;gap:10px;margin-top:18px}
 .btns button{flex:1;padding:12px;border-radius:12px;background:var(--card2);font-weight:600}
 .btns .pri{background:var(--acc);color:#fff}.btns .del{color:var(--red)}
+.who{display:block;margin-top:2px;color:var(--mute);font-size:11px}
+.bw{height:8px;background:var(--card2);border-radius:8px;overflow:hidden;margin-top:6px}.bw i{display:block;height:100%;background:var(--green)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.chips button{padding:7px 12px;border-radius:20px;background:var(--card2);border:1px solid var(--line);font-size:13px}
 .note{font-size:12px;color:var(--mute);line-height:1.5;margin-top:10px}
 </style>
 </head>
@@ -84,6 +87,7 @@ label{display:block;font-size:12px;color:var(--mute);margin:12px 2px 5px}
     <button data-v="month" class="on">Month</button>
     <button data-v="agenda">Agenda</button>
     <button data-v="tasks">To-do</button>
+    <button data-v="team">Team</button>
   </div>
   <main id="main"></main>
 </div>
@@ -143,6 +147,73 @@ function load(){try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.is
   const n=new Date();const t=new Date(2026,10,23);if(n<t){state.cursor=state.sel=fmt(t)}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify({items:state.items}))}catch(e){}}
 
+// ---- cloud sync (Supabase REST, shared group) ----
+const SB_URL='https://vvqbedihsnhobhiabuew.supabase.co',SB_KEY='sb_publishable_4rVsVAZ-Vqgo396xIfqHPg_gGRIoDC1';
+state.comp=[];state.members=[];
+let cloud=null,syncMsg='',syncing=false;
+try{cloud=JSON.parse(localStorage.getItem(KEY+'.cloud'))}catch(e){}
+const saveCloud=()=>{try{cloud?localStorage.setItem(KEY+'.cloud',JSON.stringify(cloud)):localStorage.removeItem(KEY+'.cloud')}catch(e){}};
+const enc=encodeURIComponent,grpQ=()=>'grp=eq.'+enc(cloud.grp);
+const PREF={Prefer:'resolution=merge-duplicates,return=minimal'};
+async function api(path,opt={}){
+  const r=await fetch(SB_URL+'/rest/v1/'+path,{...opt,headers:{apikey:SB_KEY,'x-group-code':cloud.grp,'Content-Type':'application/json',...(opt.headers||{})}});
+  if(!r.ok)throw new Error(r.status+' '+(await r.text()).slice(0,150));
+  const t=await r.text();return t?JSON.parse(t):null;
+}
+const rowOf=it=>({grp:cloud.grp,id:it.id,data:it,updated_at:new Date().toISOString()});
+async function pushItem(it){if(!cloud)return;try{await api('items?on_conflict=grp,id',{method:'POST',headers:PREF,body:JSON.stringify([rowOf(it)])})}catch(e){alert('Could not save to the group (check your internet). It is saved on this phone only for now.')}}
+async function removeItem(id){if(!cloud)return;try{await api('items?'+grpQ()+'&id=eq.'+enc(id),{method:'DELETE'});await api('completions?'+grpQ()+'&item_id=eq.'+enc(id),{method:'DELETE'})}catch(e){}}
+async function toggleDone(it,ds){
+  if(!it)return;
+  if(!cloud){it.done=it.done||[];const k=it.done.indexOf(ds);k>=0?it.done.splice(k,1):it.done.push(ds);save();render();return}
+  const had=isDone(it,ds),me=cloud.me;
+  if(had)state.comp=state.comp.filter(c=>!(c.item_id===it.id&&c.ds===ds&&c.member===me));else state.comp.push({item_id:it.id,ds,member:me});
+  render();
+  try{
+    if(had)await api('completions?'+grpQ()+'&item_id=eq.'+enc(it.id)+'&ds=eq.'+ds+'&member=eq.'+enc(me),{method:'DELETE'});
+    else await api('completions?on_conflict=grp,item_id,ds,member',{method:'POST',headers:PREF,body:JSON.stringify([{grp:cloud.grp,item_id:it.id,ds,member:me}])});
+  }catch(e){alert('Could not save your tick to the group (check your internet).');sync()}
+}
+async function sync(){
+  if(!cloud||syncing)return;syncing=true;
+  try{
+    const itemsQ='items?'+grpQ()+'&select=id,data';
+    let its=await api(itemsQ);
+    if(!cloud.merged){ // first time: upload this phone's plan + ticks, register me
+      const have=new Set(its.map(r=>r.id)),mine=state.items.filter(i=>!have.has(i.id));
+      if(mine.length)await api('items?on_conflict=grp,id',{method:'POST',headers:PREF,body:JSON.stringify(mine.map(rowOf))});
+      const comps=[];state.items.forEach(i=>(i.done||[]).forEach(ds=>comps.push({grp:cloud.grp,item_id:i.id,ds,member:cloud.me})));
+      if(comps.length)await api('completions?on_conflict=grp,item_id,ds,member',{method:'POST',headers:PREF,body:JSON.stringify(comps)});
+      await api('members?on_conflict=grp,name',{method:'POST',headers:PREF,body:JSON.stringify([{grp:cloud.grp,name:cloud.me}])});
+      cloud.merged=true;saveCloud();its=await api(itemsQ);
+    }
+    const [comp,mem]=await Promise.all([api('completions?'+grpQ()+'&select=item_id,ds,member'),api('members?'+grpQ()+'&select=name&order=name')]);
+    state.items=its.map(r=>r.data);state.comp=comp;state.members=mem.map(m=>m.name);save();
+    syncMsg='Synced '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  }catch(e){syncMsg='Offline - showing last saved copy';console.warn(e);syncing=false;return false}
+  syncing=false;if(!document.querySelector('.mask.show'))render();return true;
+}
+function joinSheet(){
+  openSheet(`<h2>Share with friends</h2>
+  <p class="note" style="margin-top:0">Everyone enters the same group code. Pick a long code that only your group knows - anyone with it can see and edit the plan.</p>
+  <label>Group code</label><input id="j-code" placeholder="e.g. lockin-xk29-team" autocapitalize="off" autocorrect="off" value="${esc(cloud?cloud.grp:'')}">
+  <label>Your name</label><input id="j-name" placeholder="e.g. Jibran" maxlength="20" value="${esc(cloud?cloud.me:'')}">
+  <div class="chips" id="j-chips"></div><p class="note" id="j-err" style="color:var(--red)"></p>
+  <div class="btns"><button id="j-skip">${cloud?'Cancel':'Not now'}</button><button class="pri" id="j-go">Join</button></div>`);
+  const clean=v=>v.toLowerCase().replace(/[^a-z0-9_-]/g,'');
+  $('#j-skip').onclick=()=>{try{localStorage.setItem(KEY+'.nocloud','1')}catch(e){}closeSheet()};
+  $('#j-code').onchange=async()=>{const g=clean($('#j-code').value);if(g.length<6)return;const keep=cloud;cloud={grp:g};
+    try{const m=await api('members?grp=eq.'+enc(g)+'&select=name&order=name');$('#j-chips').innerHTML=m.length?'<span class="note" style="width:100%">Already in this group - tap your name:</span>'+m.map(x=>`<button>${esc(x.name)}</button>`).join(''):'';
+      $('#j-chips').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('#j-name').value=b.textContent})}catch(e){}cloud=keep};
+  $('#j-go').onclick=async()=>{
+    const g=clean($('#j-code').value),n=$('#j-name').value.trim().slice(0,20),err=$('#j-err');
+    if(g.length<6){err.textContent='Group code must be at least 6 letters/numbers.';return}
+    if(!n){err.textContent='Enter your name.';return}
+    const keep=cloud;cloud={grp:g,me:n,merged:false};err.textContent='Connecting...';
+    if(await sync()===false){cloud=keep;err.textContent='Could not connect. Check your internet, or the cloud setup is not finished.';return}
+    saveCloud();closeSheet();render();
+  };
+}
 // ---- recurrence ----
 function occursOn(it,ds){
   if(ds<it.date)return false;
@@ -156,7 +227,8 @@ function occursOn(it,ds){
   return false;
 }
 const forDay=ds=>state.items.filter(i=>occursOn(i,ds)).sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99'));
-const isDone=(it,ds)=>(it.done||[]).includes(ds);
+const isDone=(it,ds)=>cloud?state.comp.some(c=>c.item_id===it.id&&c.ds===ds&&c.member===cloud.me):(it.done||[]).includes(ds);
+const doneBy=(it,ds)=>state.comp.filter(c=>c.item_id===it.id&&c.ds===ds).map(c=>c.member);
 const hol=ds=>HOLIDAYS[ds.slice(5)];
 
 // ---- render ----
@@ -165,18 +237,20 @@ function render(){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.v===state.view));
   const nav=state.view==='month';
   ['prev','next'].forEach(i=>$('#'+i).style.visibility=nav?'visible':'hidden');
-  $('#title').textContent=nav?MONTHS[c.getMonth()]+' '+c.getFullYear():state.view==='agenda'?'Upcoming':'To-do';
+  $('#title').textContent=nav?MONTHS[c.getMonth()]+' '+c.getFullYear():state.view==='agenda'?'Upcoming':state.view==='team'?'Team':'To-do';
   const m=$('#main');
-  m.innerHTML=state.view==='month'?monthHTML(c):state.view==='agenda'?agendaHTML():tasksHTML();
+  m.innerHTML=state.view==='month'?monthHTML(c):state.view==='agenda'?agendaHTML():state.view==='team'?teamHTML():tasksHTML();
 }
 function itemHTML(it,ds,showDate){
   const task=it.type!=='event',done=isDone(it,ds);
   const over=task&&!done&&ds<todayStr();
   const meta=[showDate?fmtLong(ds):'',it.time?fmtTime(it.time):(task?'':'All day'),it.repeat!=='none'?'↻ '+it.repeat:'',it.type==='deadline'?'Deadline':''].filter(Boolean).join(' · ');
+  let who='';
+  if(cloud&&task&&state.members.length>1){const d=doneBy(it,ds),pe=state.members.filter(m=>!d.includes(m));who='<small class="who">'+(d.length?'✓ '+esc(d.join(', ')):'')+(d.length&&pe.length?' · ':'')+(pe.length?'○ '+esc(pe.join(', ')):'')+'</small>'}
   return `<div class="item ${done?'done':''}" data-id="${it.id}" data-ds="${ds}">
     <div class="bar" style="background:${it.color}"></div>
     ${task?`<button class="chk ${done?'on':''}" data-chk="${it.id}" data-ds="${ds}">${done?'✓':''}</button>`:''}
-    <div class="t"><b>${esc(it.title)}</b><small>${esc(meta)}</small></div>
+    <div class="t"><b>${esc(it.title)}</b><small>${esc(meta)}</small>${who}</div>
     ${over?'<span class="badge over">Overdue</span>':''}</div>`;
 }
 function monthHTML(c){
@@ -220,6 +294,19 @@ function tasksHTML(){
   const blk=(t,l)=>l.length?`<div class="sec">${t}</div>`+l.sort(by).map(([i,d])=>itemHTML(i,d,true)).join(''):'';
   return (blk('Overdue',over)+blk('Upcoming',soon)+blk('Completed',done.slice(-15))) ||'<div class="empty">No tasks or deadlines yet.</div>';
 }
+function teamHTML(){
+  if(!cloud)return '<div class="empty">Share your plan with friends to see who has finished what.<br><br><button class="ibtn" id="t-join" style="width:auto;padding:0 18px;background:var(--acc);color:#fff;margin:auto">Set up sharing</button></div>';
+  const ts=todayStr(),mem=state.members.length?state.members:[cloud.me];
+  let total=0;const cnt={};mem.forEach(m=>cnt[m]=0);
+  const tasks=state.items.filter(i=>i.type!=='event');
+  tasks.forEach(it=>{const a=parse(it.date);for(let k=0;k<400;k++){const d=fmt(new Date(a.getFullYear(),a.getMonth(),a.getDate()+k));if(d>ts)break;
+    if(occursOn(it,d)){total++;const by=doneBy(it,d);mem.forEach(m=>{if(by.includes(m))cnt[m]++})}}});
+  let h=`<div class="sec">Progress so far (items due up to today)</div>`;
+  h+=mem.map(m=>{const pc=total?Math.round(cnt[m]/total*100):0;return `<div class="item" style="display:block"><b>${esc(m)}${cloud&&m===cloud.me?' (you)':''}</b> <span class="badge" style="float:right">${cnt[m]} / ${total}</span><div class="bw"><i style="width:${pc}%"></i></div></div>`}).join('');
+  const up=[];tasks.forEach(it=>{if(it.type==='deadline'&&it.repeat==='none'&&it.date>=ts)up.push(it)});up.sort((a,b)=>a.date.localeCompare(b.date));
+  h+='<div class="sec">Upcoming deadlines</div>'+(up.length?up.map(i=>itemHTML(i,i.date,true)).join(''):'<div class="empty">No upcoming deadlines.</div>');
+  return h;
+}
 function fmtLong(ds){const d=parse(ds);return DAYS[d.getDay()]+', '+d.getDate()+' '+MONTHS[d.getMonth()].slice(0,3)}
 function fmtTime(t){let[h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';h=h%12||12;return h+':'+pad(m)+' '+ap}
 
@@ -254,17 +341,19 @@ function editor(id,ds){
     if(!it.title){$('#f-title').focus();return}
     if(!it.date)return;
     const i=state.items.findIndex(x=>x.id===it.id);i>=0?state.items[i]=it:state.items.push(it);
-    save();state.sel=it.date;state.cursor=it.date;closeSheet();render();
+    save();pushItem(it);state.sel=it.date;state.cursor=it.date;closeSheet();render();
   };
-  if(ex)$('#f-del').onclick=()=>{if(confirm('Delete "'+it.title+'"'+(it.repeat!=='none'?' and all its repeats':'')+'?')){state.items=state.items.filter(x=>x.id!==it.id);save();closeSheet();render()}};
+  if(ex)$('#f-del').onclick=()=>{if(confirm('Delete "'+it.title+'"'+(it.repeat!=='none'?' and all its repeats':'')+'?')){state.items=state.items.filter(x=>x.id!==it.id);save();removeItem(it.id);closeSheet();render()}};
 }
 
 function menu(){
   openSheet(`<h2>Menu</h2>
-  <div class="btns" style="flex-direction:column"><button id="m-ics">Export to iPhone Calendar (.ics)</button>
+  <div class="btns" style="flex-direction:column"><button id="m-grp">${cloud?'Group: '+esc(cloud.grp)+' · You: '+esc(cloud.me):'Share with friends'}</button>${cloud?'<button id="m-sync">Sync now ('+esc(syncMsg||'not yet')+')</button>':''}<button id="m-ics">Export to iPhone Calendar (.ics)</button>
   <button id="m-exp">Back up data (copy JSON)</button><button id="m-imp">Restore from backup</button><button id="m-x">Close</button></div>
   <p class="note">Your data is saved only on this device in Safari/home-screen storage. Back up now and then. Notifications are not possible in a plain web app, so check the Agenda and To-do tabs, or export to the Calendar app to get alerts.</p>`);
   $('#m-x').onclick=closeSheet;
+  $('#m-grp').onclick=joinSheet;
+  if(cloud)$('#m-sync').onclick=async()=>{await sync();menu()};
   $('#m-exp').onclick=async()=>{const s=JSON.stringify(state.items);try{await navigator.clipboard.writeText(s);alert('Backup copied. Paste it into Notes to keep it safe.')}catch(e){prompt('Copy this backup:',s)}};
   $('#m-imp').onclick=()=>{const s=prompt('Paste your backup JSON:');if(!s)return;try{const a=JSON.parse(s);if(!Array.isArray(a))throw 0;state.items=a;save();closeSheet();render()}catch(e){alert('That does not look like a valid backup.')}};
   $('#m-ics').onclick=exportICS;
@@ -295,8 +384,8 @@ $('#fab').onclick=()=>editor(null,state.view==='month'?state.sel:todayStr());
 $('#tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(b){state.view=b.dataset.v;render()}});
 $('#main').addEventListener('click',e=>{
   const chk=e.target.closest('[data-chk]');
-  if(chk){const it=state.items.find(i=>i.id===chk.dataset.chk),d=chk.dataset.ds;it.done=it.done||[];
-    const k=it.done.indexOf(d);k>=0?it.done.splice(k,1):it.done.push(d);save();render();return}
+  if(chk){toggleDone(state.items.find(i=>i.id===chk.dataset.chk),chk.dataset.ds);return}
+  if(e.target.closest('#t-join')){joinSheet();return}
   const item=e.target.closest('.item');if(item){editor(item.dataset.id);return}
   const cell=e.target.closest('[data-day]');
   if(cell){state.sel=cell.dataset.day;const d=parse(state.sel);if(d.getMonth()!==parse(state.cursor).getMonth())state.cursor=state.sel;render()}
@@ -313,7 +402,9 @@ try{const c=document.createElement('canvas');c.width=c.height=180;const x=c.getC
   x.fillText(String(new Date().getDate()),90,128);$('#touchIcon').href=c.toDataURL('image/png')}catch(e){}
 
 load();render();
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)render()});
+if(cloud)sync();else{try{if(!localStorage.getItem(KEY+'.nocloud'))setTimeout(joinSheet,400)}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){render();sync()}});
+setInterval(()=>{if(!document.hidden)sync()},30000);
 })();
 </script>
 </body>
