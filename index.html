@@ -159,8 +159,8 @@ try{cloud=JSON.parse(localStorage.getItem(KEY+'.cloud'))}catch(e){}
 const saveCloud=()=>{try{cloud?localStorage.setItem(KEY+'.cloud',JSON.stringify(cloud)):localStorage.removeItem(KEY+'.cloud')}catch(e){}};
 const enc=encodeURIComponent,grpQ=()=>'grp=eq.'+enc(cloud.grp);
 const PREF={Prefer:'resolution=merge-duplicates,return=minimal'};
-async function api(path,opt={}){
-  const r=await fetch(SB_URL+'/rest/v1/'+path,{...opt,headers:{apikey:SB_KEY,'x-group-code':cloud.grp,'Content-Type':'application/json',...(opt.headers||{})}});
+async function api(path,opt={},grp){
+  const r=await fetch(SB_URL+'/rest/v1/'+path,{...opt,headers:{apikey:SB_KEY,'x-group-code':grp||cloud.grp,'Content-Type':'application/json',...(opt.headers||{})}});
   if(!r.ok)throw new Error(r.status+' '+(await r.text()).slice(0,150));
   const t=await r.text();return t?JSON.parse(t):null;
 }
@@ -223,24 +223,25 @@ async function disablePush(){
   try{localStorage.removeItem(KEY+'.push')}catch(e){}
 }
 function joinSheet(){
+  let last={};try{last=JSON.parse(localStorage.getItem(KEY+'.last'))||{}}catch(e){}
   openSheet(`<h2>Share with friends</h2>
   <p class="note" style="margin-top:0">Everyone enters the same group code. Pick a long code that only your group knows - anyone with it can see and edit the plan.</p>
-  <label>Group code</label><input id="j-code" placeholder="e.g. lockin-xk29-team" autocapitalize="off" autocorrect="off" value="${esc(cloud?cloud.grp:'')}">
-  <label>Your name</label><input id="j-name" placeholder="e.g. Jibran" maxlength="20" value="${esc(cloud?cloud.me:'')}">
+  <label>Group code</label><input id="j-code" placeholder="e.g. lockin-xk29-team" autocapitalize="off" autocorrect="off" value="${esc(cloud?cloud.grp:(last.g||''))}">
+  <label>Your name</label><input id="j-name" placeholder="e.g. Jibran" maxlength="20" value="${esc(cloud?cloud.me:(last.n||''))}">
   <div class="chips" id="j-chips"></div><p class="note" id="j-err" style="color:var(--red)"></p>
   <div class="btns"><button id="j-skip">${cloud?'Cancel':'Not now'}</button><button class="pri" id="j-go">Join</button></div>`);
   const clean=v=>v.toLowerCase().replace(/[^a-z0-9_-]/g,'');
   $('#j-skip').onclick=()=>{try{localStorage.setItem(KEY+'.nocloud','1')}catch(e){}closeSheet()};
-  $('#j-code').onchange=async()=>{const g=clean($('#j-code').value);if(g.length<6)return;const keep=cloud;cloud={grp:g};
-    try{const m=await api('members?grp=eq.'+enc(g)+'&select=name&order=name');$('#j-chips').innerHTML=m.length?'<span class="note" style="width:100%">Already in this group - tap your name:</span>'+m.map(x=>`<button>${esc(x.name)}</button>`).join(''):'';
-      $('#j-chips').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('#j-name').value=b.textContent})}catch(e){}cloud=keep};
+  $('#j-code').onchange=async()=>{const g=clean($('#j-code').value);if(g.length<6)return;
+    try{const m=await api('members?grp=eq.'+enc(g)+'&select=name&order=name',{},g);$('#j-chips').innerHTML=m.length?'<span class="note" style="width:100%">Already in this group - tap your name:</span>'+m.map(x=>`<button>${esc(x.name)}</button>`).join(''):'';
+      $('#j-chips').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('#j-name').value=b.textContent})}catch(e){}};
   $('#j-go').onclick=async()=>{
     const g=clean($('#j-code').value),n=$('#j-name').value.trim().slice(0,20),err=$('#j-err');
     if(g.length<6){err.textContent='Group code must be at least 6 letters/numbers.';return}
     if(!n){err.textContent='Enter your name.';return}
     const keep=cloud;cloud={grp:g,me:n,merged:false};err.textContent='Connecting...';
     if(await sync()===false){cloud=keep;err.textContent='Could not connect. Check your internet, or the cloud setup is not finished.';return}
-    saveCloud();closeSheet();render();
+    saveCloud();try{localStorage.setItem(KEY+'.last',JSON.stringify({g,n}))}catch(e){}closeSheet();render();
   };
 }
 // ---- recurrence ----
@@ -427,6 +428,7 @@ let sx=null;$('#main').addEventListener('touchstart',e=>{sx=e.touches[0].clientX
 $('#main').addEventListener('touchend',e=>{if(sx===null||state.view!=='month')return;const dx=e.changedTouches[0].clientX-sx;sx=null;
   if(Math.abs(dx)>70)(dx<0?$('#next'):$('#prev')).click()},{passive:true});
 
+try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 load();render();
 if(cloud)sync();else{try{if(!localStorage.getItem(KEY+'.nocloud'))setTimeout(joinSheet,400)}catch(e){}}
