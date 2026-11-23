@@ -113,7 +113,11 @@ let state={items:[],view:'month',cursor:fmt(new Date()),sel:todayStr()};
 const [IND,GRN,AMB,RED,SKY,PNK]=COLORS;
 const S=(id,type,title,date,color,o={})=>({id:'seed-'+id,type,title,date,time:'',repeat:'none',until:'',color,notes:'',done:[],...o});
 const SEED=[
-  S(1,'event','Class work & group work','2026-11-23',IND,{repeat:'daily',until:'2026-11-27'}),
+  S(1,'event','AIP and Algorithms Work','2026-11-23',IND,{repeat:'daily',until:'2026-11-27'}),
+  S(30,'event','AIP and Algorithms Work','2026-11-30',IND,{repeat:'daily',until:'2026-12-04'}),
+  S(31,'event','AIP and Algorithms Work','2026-12-07',IND,{repeat:'daily',until:'2026-12-11'}),
+  S(32,'event','AIP and Algorithms Work','2026-12-14',IND,{repeat:'daily',until:'2026-12-16'}),
+  S(33,'task','Reminder: Algorithm & AIP class test studies','2026-12-21',SKY,{repeat:'daily',until:'2027-01-11'}),
   S(2,'task','Business Stats assignment: understand & start planning','2026-11-28',AMB,{repeat:'daily',until:'2026-11-29'}),
   S(3,'event',"Riddhi's B'day",'2026-12-01',PNK,{repeat:'yearly'}),
   S(4,'task','Business Stats assignment work','2026-12-05',AMB,{repeat:'daily',until:'2026-12-06'}),
@@ -133,7 +137,9 @@ const SEED=[
   S(14,'deadline','Analytics Engineering assignment','2027-01-19',RED)
 ];
 function load(){try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.items))state.items=r.items}catch(e){}
-  try{if(!localStorage.getItem(KEY+'.seeded')){const have=new Set(state.items.map(i=>i.id));SEED.forEach(s=>{if(!have.has(s.id))state.items.push(s)});localStorage.setItem(KEY+'.seeded','1');save()}}catch(e){}
+  try{if(localStorage.getItem(KEY+'.seedver')!=='2'){const old=new Map(state.items.filter(i=>i.id.startsWith('seed-')).map(i=>[i.id,i]));
+    state.items=state.items.filter(i=>!i.id.startsWith('seed-'));
+    SEED.forEach(x=>{const o=old.get(x.id);state.items.push(o?{...x,done:o.done||[]}:x)});localStorage.setItem(KEY+'.seedver','2');save()}}catch(e){}
   const n=new Date();const t=new Date(2026,10,23);if(n<t){state.cursor=state.sel=fmt(t)}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify({items:state.items}))}catch(e){}}
 
