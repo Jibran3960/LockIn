@@ -70,6 +70,8 @@ input[type=date],input[type=time]{display:block;min-width:0;max-width:100%;heigh
 .btns{display:flex;gap:10px;margin-top:18px}
 .btns button{flex:1;padding:12px;border-radius:12px;background:var(--card2);font-weight:600}
 .btns .pri{background:var(--acc);color:#fff}.btns .del{color:var(--red)}
+.toast-x{}#toast{position:fixed;left:50%;bottom:calc(96px + var(--safe-b));transform:translate(-50%,20px);background:#16213a;border:1px solid var(--line);color:var(--text);padding:10px 16px;border-radius:14px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:20;max-width:86%;text-align:center}
+#toast.show{opacity:1;transform:translate(-50%,0)}
 .who{display:block;margin-top:2px;color:var(--mute);font-size:11px}
 .bw{height:8px;background:var(--card2);border-radius:8px;overflow:hidden;margin-top:6px}.bw i{display:block;height:100%;background:var(--green)}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.chips button{padding:7px 12px;border-radius:20px;background:var(--card2);border:1px solid var(--line);font-size:13px}
@@ -99,7 +101,7 @@ input[type=date],input[type=time]{display:block;min-width:0;max-width:100%;heigh
 <script>
 (function(){
 'use strict';
-const KEY='mycal.v1';
+const KEY='mycal.v1',APP_VER='2026-11-23-3';
 const COLORS=['#6366f1','#34d399','#f59e0b','#f87171','#38bdf8','#e879f9'];
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -165,6 +167,8 @@ async function api(path,opt={},grp){
   if(!r.ok)throw new Error(r.status+' '+(await r.text()).slice(0,150));
   const t=await r.text();return t?JSON.parse(t):null;
 }
+function toast(msg){let t=document.getElementById('toast');if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t)}
+  t.textContent=msg;t.className='show';clearTimeout(toast.h);toast.h=setTimeout(()=>{t.className=''},2600)}
 const rowOf=it=>({grp:cloud.grp,id:it.id,data:it,updated_at:new Date().toISOString()});
 async function pushItem(it){if(!cloud)return;try{await api('items?on_conflict=grp,id',{method:'POST',headers:PREF,body:JSON.stringify([rowOf(it)])})}catch(e){alert('Could not save to the group (check your internet). It is saved on this phone only for now.')}}
 async function removeItem(id){if(!cloud)return;try{await api('items?'+grpQ()+'&id=eq.'+enc(id),{method:'DELETE'});await api('completions?'+grpQ()+'&item_id=eq.'+enc(id),{method:'DELETE'})}catch(e){}}
@@ -174,7 +178,8 @@ async function toggleDone(it,ds){
   const had=isDone(it,ds),me=cloud.me;ver++;writes++;
   if(had)state.comp=state.comp.filter(c=>!(c.item_id===it.id&&c.ds===ds&&c.member===me));else state.comp.push({item_id:it.id,ds,member:me});
   saveCache();render();
-  if(!had&&pushOn()){try{navigator.serviceWorker.ready.then(r=>r.showNotification('Nice work ✅',{body:'You completed "'+it.title+'"',icon:'icon-192.png',tag:'self-done'}))}catch(e){}}
+  if(!had){toast('✅ Done: '+it.title);
+    try{if(typeof Notification!=='undefined'&&Notification.permission==='granted')navigator.serviceWorker.ready.then(r=>r.showNotification('Nice work ✅',{body:'You completed "'+it.title+'"',icon:'icon-192.png',tag:'self-done'}))}catch(e){}}
   try{
     if(had)await api('completions?'+grpQ()+'&item_id=eq.'+enc(it.id)+'&ds=eq.'+ds+'&member=eq.'+enc(me),{method:'DELETE'});
     else await api('completions?on_conflict=grp,item_id,ds,member',{method:'POST',headers:PREF,body:JSON.stringify([{grp:cloud.grp,item_id:it.id,ds,member:me,notify:true}])});
@@ -434,7 +439,9 @@ try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 load();render();
 if(cloud)sync();else{try{if(!localStorage.getItem(KEY+'.nocloud'))setTimeout(joinSheet,400)}catch(e){}}
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){render();sync()}});
+async function checkUpdate(){try{const t=await (await fetch('index.html?v='+Date.now(),{cache:'no-store'})).text();const m=t.match(/APP_VER='([^']+)'/);if(m&&m[1]!==APP_VER&&!document.querySelector('.mask.show'))location.reload()}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){render();sync();checkUpdate()}});
+checkUpdate();
 setInterval(()=>{if(!document.hidden)sync()},30000);
 })();
 </script>
