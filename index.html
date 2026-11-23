@@ -174,6 +174,7 @@ async function toggleDone(it,ds){
   const had=isDone(it,ds),me=cloud.me;ver++;writes++;
   if(had)state.comp=state.comp.filter(c=>!(c.item_id===it.id&&c.ds===ds&&c.member===me));else state.comp.push({item_id:it.id,ds,member:me});
   saveCache();render();
+  if(!had&&pushOn()){try{navigator.serviceWorker.ready.then(r=>r.showNotification('Nice work ✅',{body:'You completed "'+it.title+'"',icon:'icon-192.png',tag:'self-done'}))}catch(e){}}
   try{
     if(had)await api('completions?'+grpQ()+'&item_id=eq.'+enc(it.id)+'&ds=eq.'+ds+'&member=eq.'+enc(me),{method:'DELETE'});
     else await api('completions?on_conflict=grp,item_id,ds,member',{method:'POST',headers:PREF,body:JSON.stringify([{grp:cloud.grp,item_id:it.id,ds,member:me,notify:true}])});

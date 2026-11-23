@@ -14,6 +14,7 @@ function occursOn(it, ds) {
   if (it.repeat === 'yearly') return a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() === b.getUTCDate();
   return false;
 }
+const dshort = ds => { const d = new Date(ds + 'T00:00:00Z'); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; };
 const t12 = t => { let [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return h + ':' + String(m).padStart(2, '0') + ' ' + ap; };
 
 /**
@@ -33,6 +34,7 @@ function plan(subs, data, nowMs, sent) {
     const gsubs = subs.filter(s => s.grp === g);
     const done = new Set(comps.map(c => c.item_id + '|' + c.ds + '|' + c.member));
     const title = Object.fromEntries(items.map(i => [i.id, i.title]));
+    const rep = Object.fromEntries(items.map(i => [i.id, i.repeat]));
     const tasks = items.filter(i => i.type !== 'event');
     const members = [...new Set(gsubs.map(s => s.member))];
 
@@ -61,7 +63,7 @@ function plan(subs, data, nowMs, sent) {
       });
       // Friend finished something (live ticks in the last 3 hours)
       comps.filter(c => c.notify && c.member !== m && nowMs - Date.parse(c.created_at) < 3 * 3600e3 && title[c.item_id]).forEach(c =>
-        msubs.forEach(s => add(s, `c|${g}|${m}|${c.item_id}|${c.ds}|${c.member}|${s.endpoint.slice(-12)}`, `${c.member} finished ✅`, title[c.item_id])));
+        msubs.forEach(s => add(s, `c|${g}|${m}|${c.item_id}|${c.ds}|${c.member}|${s.endpoint.slice(-12)}`, `${c.member} completed ✅`, `"${title[c.item_id]}"` + (rep[c.item_id] && rep[c.item_id] !== 'none' ? ' (' + dshort(c.ds) + ')' : ''))));
     }
   }
   return out;
