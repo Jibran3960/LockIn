@@ -72,6 +72,7 @@ input[type=date],input[type=time]{display:block;min-width:0;max-width:100%;heigh
 .btns .pri{background:var(--acc);color:#fff}.btns .del{color:var(--red)}
 .toast-x{}#toast{position:fixed;left:50%;bottom:calc(96px + var(--safe-b));transform:translate(-50%,20px);background:#16213a;border:1px solid var(--line);color:var(--text);padding:10px 16px;border-radius:14px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:20;max-width:86%;text-align:center}
 #toast.show{opacity:1;transform:translate(-50%,0)}
+#toast.act{pointer-events:auto;cursor:pointer;border-color:var(--acc)}
 .who{display:block;margin-top:2px;color:var(--mute);font-size:11px}
 .bw{height:8px;background:var(--card2);border-radius:8px;overflow:hidden;margin-top:6px}.bw i{display:block;height:100%;background:var(--green)}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.chips button{padding:7px 12px;border-radius:20px;background:var(--card2);border:1px solid var(--line);font-size:13px}
@@ -102,7 +103,7 @@ input[type=date],input[type=time]{display:block;min-width:0;max-width:100%;heigh
 <script>
 (function(){
 'use strict';
-const KEY='mycal.v1',APP_VER='2026-11-24-2';
+const KEY='mycal.v1',APP_VER='2026-11-24-3';
 const COLORS=['#6366f1','#34d399','#f59e0b','#f87171','#38bdf8','#e879f9'];
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -168,8 +169,8 @@ async function api(path,opt={},grp){
   if(!r.ok)throw new Error(r.status+' '+(await r.text()).slice(0,150));
   const t=await r.text();return t?JSON.parse(t):null;
 }
-function toast(msg){let t=document.getElementById('toast');if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t)}
-  t.textContent=msg;t.className='show';clearTimeout(toast.h);toast.h=setTimeout(()=>{t.className=''},2600)}
+function toast(msg,act){let t=document.getElementById('toast');if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t)}
+  t.textContent=msg;t.className='show'+(act?' act':'');t.onclick=act?()=>{t.className='';act()}:null;clearTimeout(toast.h);toast.h=setTimeout(()=>{t.className=''},act?7000:2600)}
 const rowOf=it=>({grp:cloud.grp,id:it.id,data:it,updated_at:new Date().toISOString()});
 async function pushItem(it){if(!cloud)return;try{await api('items?on_conflict=grp,id',{method:'POST',headers:PREF,body:JSON.stringify([rowOf(it)])})}catch(e){alert('Could not save to the group (check your internet). It is saved on this phone only for now.')}}
 async function removeItem(id){if(!cloud)return;try{await api('items?'+grpQ()+'&id=eq.'+enc(id),{method:'DELETE'});await api('completions?'+grpQ()+'&item_id=eq.'+enc(id),{method:'DELETE'})}catch(e){}}
@@ -206,11 +207,15 @@ async function sync(){
     state.items=its.map(r=>r.data);state.comp=comp;state.members=mem.map(m=>m.name);save();saveCache();
     syncMsg='Synced '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
   }catch(e){syncMsg='Offline - showing last saved copy';console.warn(e);syncing=false;return false}
-  syncing=false;if(!document.querySelector('.mask.show'))render();return true;
+  syncing=false;refreshTz();if(!document.querySelector('.mask.show'))render();return true;
 }
 const VAPID_PUBLIC='BL78Dbmv-FiiS0WBGAQW4LwKMwOBIwO10EfDc3v6qGIGvvykGw4SdECr8D2Axwz-oWS8iaUm9CWBP5XhsUBhBCk';
 const b64u=v=>{const p='='.repeat((4-v.length%4)%4),r=atob((v+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from([...r].map(c=>c.charCodeAt(0)))};
 const pushOn=()=>{try{return localStorage.getItem(KEY+'.push')==='1'&&typeof Notification!=='undefined'&&Notification.permission==='granted'}catch(e){return false}};
+const subRow=j=>({grp:cloud.grp,member:cloud.me,endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,tz:(Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/London')});
+async function refreshTz(){ // keep this phone's time zone up to date on the server (runs quietly after sync)
+  try{if(!cloud||!pushOn()||refreshTz.done)return;const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(!sub)return;
+    await api('push_subs?on_conflict=endpoint',{method:'POST',headers:PREF,body:JSON.stringify([subRow(sub.toJSON())])});refreshTz.done=1}catch(e){}}
 async function enablePush(){
   if(!cloud){alert('Join your group first (Share with friends).');return}
   if(!('serviceWorker' in navigator)||!('PushManager' in window)||typeof Notification==='undefined'){
@@ -221,7 +226,7 @@ async function enablePush(){
     const reg=await navigator.serviceWorker.ready;
     const sub=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(VAPID_PUBLIC)});
     const j=sub.toJSON();
-    await api('push_subs?on_conflict=endpoint',{method:'POST',headers:PREF,body:JSON.stringify([{grp:cloud.grp,member:cloud.me,endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth}])});
+    await api('push_subs?on_conflict=endpoint',{method:'POST',headers:PREF,body:JSON.stringify([subRow(j)])}).catch(()=>api('push_subs?on_conflict=endpoint',{method:'POST',headers:PREF,body:JSON.stringify([{...subRow(j),tz:undefined}])}));
     try{localStorage.setItem(KEY+'.push','1')}catch(e){}
     reg.showNotification('LockIn',{body:'Notifications are on ✅',icon:'icon-192.png'});
   }catch(e){alert('Could not turn on notifications: '+e.message)}
@@ -272,7 +277,8 @@ const hol=ds=>HOLIDAYS[ds.slice(5)];
 // Who an item is for: empty/missing = everyone. The creator can always see what they made.
 const applies=(it,m)=>!it.for||!it.for.length||it.for.includes(m);
 const visible=it=>!cloud||applies(it,cloud.me)||it.by===cloud.me;
-const vitems=()=>state.items.filter(visible);
+const live=i=>!i.deleted;
+const vitems=()=>state.items.filter(i=>live(i)&&visible(i));
 
 // ---- render ----
 function render(){
@@ -344,7 +350,7 @@ function teamHTML(){
   const ts=todayStr(),mem=state.members.length?state.members:[cloud.me];
   const tot={},cnt={};mem.forEach(m=>{tot[m]=0;cnt[m]=0});
   const tasks=vitems().filter(i=>i.type!=='event');
-  state.items.filter(i=>i.type!=='event').forEach(it=>{const a=parse(it.date);for(let k=0;k<400;k++){const d=fmt(new Date(a.getFullYear(),a.getMonth(),a.getDate()+k));if(d>ts)break;
+  state.items.filter(i=>live(i)&&i.type!=='event').forEach(it=>{const a=parse(it.date);for(let k=0;k<400;k++){const d=fmt(new Date(a.getFullYear(),a.getMonth(),a.getDate()+k));if(d>ts)break;
     if(occursOn(it,d)){const by=doneBy(it,d);mem.forEach(m=>{if(applies(it,m)){tot[m]++;if(by.includes(m))cnt[m]++}})}}});
   let h=`<div class="sec">Progress so far (items due up to today)</div>`;
   h+=mem.map(m=>{const pc=tot[m]?Math.round(cnt[m]/tot[m]*100):0;return `<div class="item" style="display:block"><b>${esc(m)}${cloud&&m===cloud.me?' (you)':''}</b> <span class="badge" style="float:right">${cnt[m]} / ${tot[m]}</span><div class="bw"><i style="width:${pc}%"></i></div></div>`}).join('');
@@ -363,7 +369,7 @@ mask.addEventListener('click',e=>{if(e.target===mask)closeSheet()});
 
 function editor(id,ds,occ){
   const ex=state.items.find(i=>i.id===id);
-  const it=ex?{...ex}:{id:uid(),type:'event',title:'',date:ds||state.sel,time:'',repeat:'none',until:'',color:COLORS[0],notes:'',done:[],for:[],by:cloud?cloud.me:''};
+  const it=ex?{...ex}:{id:uid(),type:'event',title:'',date:ds||state.sel,time:'',repeat:'none',until:'',color:COLORS[0],notes:'',done:[],for:[],by:cloud?cloud.me:'',remind:''};
   const seg=(k,opts)=>`<div class="seg" data-k="${k}">${opts.map(([v,l])=>`<button data-v="${v}" class="${it[k]===v?'on':''}">${l}</button>`).join('')}</div>`;
   openSheet(`<h2>${ex?'Edit':'New'}</h2>
     <label>Type</label>${seg('type',[['event','Event'],['task','Task'],['deadline','Deadline']])}
@@ -374,6 +380,8 @@ function editor(id,ds,occ){
     <label>Repeat until (optional)</label><input type="date" id="f-until" value="${it.until}">
     <label>Colour</label><div class="colors" data-k="color">${COLORS.map(c=>`<button data-v="${c}" class="${it.color===c?'on':''}" style="background:${c}"></button>`).join('')}</div>
     ${cloud?'<label>Who is this for?</label><div class="chips" id="f-for"></div>':''}
+    <label>Extra reminder (optional)</label><select id="f-remind"><option value="">None (just the usual 8am / 8pm)</option><option value="2d">2 days before</option><option value="1d">1 day before</option><option value="2h">2 hours before</option><option value="1h">1 hour before</option></select>
+    <p class="note" style="margin-top:6px">"Days before" arrive at 9am. "Hours before" use the item's time (or 9am if it has none). Needs notifications on.</p>
     <label>Notes</label><textarea id="f-notes" rows="3">${esc(it.notes)}</textarea>
     <div class="btns">${ex&&it.type!=='event'&&occ&&(!cloud||applies(ex,cloud.me))?`<button id="f-done">${isDone(ex,occ)?'Mark not done':'Mark done'}</button>`:''}${ex?'<button class="del" id="f-del">Delete</button>':''}<button id="f-cancel">Cancel</button><button class="pri" id="f-save">Save</button></div>`);
   sheet.querySelectorAll('[data-k]').forEach(g=>g.addEventListener('click',e=>{
@@ -385,25 +393,38 @@ function editor(id,ds,occ){
     drawFor();
     $('#f-for').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const w=b.dataset.w;it.for=it.for||[];
       if(!w)it.for=[];else it.for=it.for.includes(w)?it.for.filter(x=>x!==w):[...it.for,w];drawFor()})}
+  $('#f-remind').value=it.remind||'';
   $('#f-cancel').onclick=closeSheet;
   if($('#f-done'))$('#f-done').onclick=()=>{toggleDone(ex,occ);closeSheet()};
   $('#f-save').onclick=()=>{
     it.title=$('#f-title').value.trim();it.date=$('#f-date').value;it.time=$('#f-time').value;
-    it.until=$('#f-until').value;it.notes=$('#f-notes').value;if(cloud&&!it.by)it.by=cloud.me;
+    it.until=$('#f-until').value;it.notes=$('#f-notes').value;if(cloud&&!it.by)it.by=cloud.me;it.remind=$('#f-remind').value;
     if(!it.title){$('#f-title').focus();return}
     if(!it.date)return;
     const i=state.items.findIndex(x=>x.id===it.id);i>=0?state.items[i]=it:state.items.push(it);
     save();pushItem(it);state.sel=it.date;state.cursor=it.date;closeSheet();render();
   };
-  if(ex)$('#f-del').onclick=()=>{if(confirm('Delete "'+it.title+'"'+(it.repeat!=='none'?' and all its repeats':'')+'?')){state.items=state.items.filter(x=>x.id!==it.id);save();removeItem(it.id);closeSheet();render()}};
+  if(ex)$('#f-del').onclick=()=>{if(confirm('Delete "'+it.title+'"'+(it.repeat!=='none'?' and all its repeats':'')+'? You can restore it from the menu.')){softDelete(it.id);closeSheet()}};
 }
 
+function softDelete(id){const it=state.items.find(i=>i.id===id);if(!it)return;
+  it.deleted=true;it.deletedAt=Date.now();it.deletedBy=cloud?cloud.me:'';save();pushItem(it);render();
+  toast('Deleted "'+it.title+'" - tap to undo',()=>restoreItem(id))}
+function restoreItem(id){const it=state.items.find(i=>i.id===id);if(!it)return;
+  delete it.deleted;delete it.deletedAt;delete it.deletedBy;save();pushItem(it);render();toast('Restored "'+it.title+'"')}
+const recentlyDeleted=()=>state.items.filter(i=>i.deleted&&Date.now()-(i.deletedAt||0)<30*864e5&&(!cloud||applies(i,cloud.me)||i.by===cloud.me)).sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
+function deletedSheet(){const l=recentlyDeleted();
+  openSheet(`<h2>Recently deleted</h2>${l.length?l.map(i=>`<div class="item"><div class="bar" style="background:${i.color}"></div><div class="t"><b>${esc(i.title)}</b><small>${esc(i.type)} · ${esc(fmtLong(i.date))}${i.deletedBy?' · deleted by '+esc(i.deletedBy):''}</small></div><button class="badge" data-restore="${i.id}" style="background:var(--acc);color:#fff;padding:7px 12px">Restore</button></div>`).join(''):'<div class="empty">Nothing deleted in the last 30 days.</div>'}
+  <div class="btns"><button id="d-x">Close</button></div>`);
+  $('#d-x').onclick=closeSheet;
+  sheet.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>{restoreItem(b.dataset.restore);deletedSheet()})}
 function menu(){
   openSheet(`<h2>Menu</h2>
-  <div class="btns" style="flex-direction:column"><button id="m-grp">${cloud?'Group: '+esc(cloud.grp)+' · You: '+esc(cloud.me):'Share with friends'}</button>${cloud?'<button id="m-push">'+(pushOn()?'Notifications: ON (tap to turn off)':'Turn on notifications')+'</button>':''}${cloud?'<button id="m-sync">Sync now ('+esc(syncMsg||'not yet')+')</button>':''}<button id="m-ics">Export to iPhone Calendar (.ics)</button>
+  <div class="btns" style="flex-direction:column"><button id="m-grp">${cloud?'Group: '+esc(cloud.grp)+' · You: '+esc(cloud.me):'Share with friends'}</button>${cloud?'<button id="m-push">'+(pushOn()?'Notifications: ON (tap to turn off)':'Turn on notifications')+'</button>':''}${cloud?'<button id="m-sync">Sync now ('+esc(syncMsg||'not yet')+')</button>':''}${recentlyDeleted().length?'<button id="m-del">Recently deleted ('+recentlyDeleted().length+')</button>':''}<button id="m-ics">Export to iPhone Calendar (.ics)</button>
   <button id="m-exp">Back up data (copy JSON)</button><button id="m-imp">Restore from backup</button><button id="m-x">Close</button></div>
-  <p class="note">${cloud?'Your plan and ticks are saved in your group online, so they sync across your friends and survive a phone change. Keep this app on your Home Screen and open it from there. Reminders arrive at about 8am and 8pm (India time) and shortly before timed items, so a few minutes of delay is normal.':'Your data is saved only on this device. Tap Share with friends to save it online and get reminders.'} The backup option below is optional.</p>`);
+  <p class="note">${cloud?'Your plan and ticks are saved in your group online, so they sync across your friends and survive a phone change. Keep this app on your Home Screen and open it from there. Reminders arrive at about 8am and 8pm (local time on your phone) and shortly before timed items, so a few minutes of delay is normal.':'Your data is saved only on this device. Tap Share with friends to save it online and get reminders.'} The backup option below is optional.</p>`);
   $('#m-x').onclick=closeSheet;
+  if($('#m-del'))$('#m-del').onclick=deletedSheet;
   $('#m-grp').onclick=joinSheet;
   if(cloud)$('#m-push').onclick=async()=>{pushOn()?await disablePush():await enablePush();menu()};
   if(cloud)$('#m-sync').onclick=async()=>{await sync();menu()};
